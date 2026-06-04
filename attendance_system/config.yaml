@@ -1,0 +1,84 @@
+system:
+  name: "企业考勤智能管理系统"
+  version: "1.0.0"
+  timezone: "Asia/Shanghai"
+  language: "zh_CN"
+
+database:
+  url: "sqlite+aiosqlite:///./attendance.db"
+  pool_size: 20
+  max_overflow: 30
+
+data_sources:
+  access_control:
+    enabled: true
+    api_url: "http://access-control-api/internal"
+    timeout: 30
+    batch_size: 5000
+  gps:
+    enabled: true
+    api_url: "http://gps-api/internal"
+    timeout: 30
+    batch_size: 5000
+    geofence_radius_meters: 200
+  wifi:
+    enabled: false
+    api_url: "http://wifi-api/internal"
+    timeout: 30
+    batch_size: 5000
+
+anomaly_detection:
+  late_threshold_minutes: 5
+  early_leave_threshold_minutes: 5
+  missing_punch_window_hours: 2
+  overtime_daily_limit_hours: 12
+  overtime_consecutive_alert: true
+
+notifications:
+  enabled: true
+  channels:
+    - "wechat_work"
+    - "email"
+    - "sms"
+  wechat_work:
+    corp_id: ""
+    agent_id: ""
+    secret: ""
+  email:
+    smtp_host: "smtp.example.com"
+    smtp_port: 465
+    sender: "attendance@company.com"
+  sms:
+    provider: "aliyun"
+    sign_name: "考勤系统"
+
+scheduling:
+  optimization_trigger_threshold: 0.9
+  min_staff_ratio: 0.8
+  max_daily_hours: 12
+  max_weekly_hours: 60
+  min_rest_hours_between_shifts: 11
+  business_volume_weight: 0.6
+  labor_cost_weight: 0.3
+  employee_preference_weight: 0.1
+
+salary:
+  late_deduction_per_minute: 5.0
+  early_leave_deduction_per_minute: 5.0
+  absent_deduction_per_day: 200.0
+  missing_punch_deduction: 50.0
+  overtime_rate_weekday: 1.5
+  overtime_rate_weekend: 2.0
+  overtime_rate_holiday: 3.0
+
+reports:
+  output_dir: "./reports"
+  pdf_template_dir: "./templates"
+  company_logo: "./assets/logo.png"
+
+logging:
+  level: "INFO"
+  file: "./logs/attendance.log"
+  max_size_mb: 100
+  backup_count: 10
+  audit_trail: true
