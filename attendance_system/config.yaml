@@ -7,7 +7,7 @@ system:
 database:
   # SQLite (开发/单机)
   url: "sqlite+aiosqlite:///./attendance.db"
-  # PostgreSQL (生产/高并发)
+  # PostgreSQL (生产/高并发) - 通过DATABASE_URL环境变量在docker-compose中覆盖
   # url: "postgresql+asyncpg://attendance:attendance@2024@localhost:5432/attendance"
   pool_size: 20
   max_overflow: 30

@@ -4,14 +4,20 @@
       <template #header>
         <div class="card-header flex-between">
           <span>异常记录</span>
-          <el-select v-model="statusFilter" placeholder="状态筛选" size="small" style="width: 120px" @change="fetchData">
-            <el-option label="全部" value="" />
-            <el-option label="待确认" value="pending" />
-            <el-option label="已申诉" value="appealed" />
-            <el-option label="已通过" value="approved" />
-            <el-option label="已驳回" value="rejected" />
-            <el-option label="已自动修正" value="auto_corrected" />
-          </el-select>
+          <div class="filter-bar">
+            <el-select v-model="statusFilter" placeholder="状态筛选" size="small" style="width: 120px; margin-right: 10px" @change="fetchData">
+              <el-option label="全部" value="" />
+              <el-option label="待确认" value="pending" />
+              <el-option label="已申诉" value="appealed" />
+              <el-option label="已通过" value="approved" />
+              <el-option label="已驳回" value="rejected" />
+              <el-option label="已自动修正" value="auto_corrected" />
+            </el-select>
+            <el-button type="primary" link size="small" @click="refreshData">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
         </div>
       </template>
       <el-table :data="tableData" stripe border>
@@ -85,9 +91,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getEmployeeAnomalies, submitApproval } from '@/api/employee'
+import { Refresh } from '@element-plus/icons-vue'
 
 const tableData = ref([])
 const total = ref(0)
@@ -97,6 +104,7 @@ const statusFilter = ref('')
 const dialogVisible = ref(false)
 const currentAnomaly = ref(null)
 const submitting = ref(false)
+let refreshTimer = null
 
 const explainForm = reactive({
   reason: ''
@@ -127,6 +135,10 @@ const fetchData = async () => {
   total.value = res.total || 0
 }
 
+const refreshData = () => {
+  fetchData()
+}
+
 const openExplainDialog = (row) => {
   currentAnomaly.value = row
   explainForm.reason = ''
@@ -155,6 +167,11 @@ const submitExplain = async () => {
 
 onMounted(() => {
   fetchData()
+  refreshTimer = setInterval(fetchData, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 

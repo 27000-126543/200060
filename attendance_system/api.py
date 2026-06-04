@@ -3,7 +3,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional, List, Dict, Any
 from decimal import Decimal
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -54,7 +54,13 @@ class ApprovalRequest(BaseModel):
 
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+async def get_token(
+    token: Optional[str] = Depends(oauth2_scheme),
+    token_query: Optional[str] = None
+):
+    return token or token_query
 
 _config = None
 _engine = None
@@ -111,7 +117,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    token: Optional[str] = Depends(get_token),
     db: AsyncSession = Depends(get_session)
 ):
     credentials_exception = HTTPException(
@@ -119,6 +125,8 @@ async def get_current_user(
         detail="无法验证凭据",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if not token:
+        raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         employee_id_str = payload.get("sub")
@@ -160,10 +168,26 @@ def create_app():
 
     @app.post("/api/auth/login", response_model=Token)
     async def login(
-        request: LoginRequest,
+        request: Request,
         db: AsyncSession = Depends(get_session)
     ):
-        stmt = select(Employee).where(Employee.employee_no == request.username)
+        username = ""
+        password = ""
+        
+        try:
+            body = await request.json()
+            username = body.get("username", "")
+            password = body.get("password", "")
+        except Exception:
+            pass
+
+        if not username or not password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="请提供用户名和密码",
+            )
+
+        stmt = select(Employee).where(Employee.employee_no == username)
         result = await db.execute(stmt)
         employee = result.scalar_one_or_none()
 
@@ -173,14 +197,14 @@ def create_app():
                 detail="工号或密码错误",
             )
 
-        if request.password != "123456":
+        if password != "123456":
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="工号或密码错误",
             )
 
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        role = "admin" if request.username in ("ADMIN001", "EMP0001", "admin") else "employee"
+        role = "admin" if username in ("ADMIN001", "EMP0001", "admin") else "employee"
 
         access_token = create_access_token(
             data={"sub": str(employee.id), "role": role},
@@ -692,12 +716,22 @@ def create_app():
         filepath = os.path.join(cfg.reports_output_dir, filename)
 
         if not os.path.exists(filepath):
-            raise HTTPException(status_code=404, detail="报告文件不存在")
+            raise HTTPException(status_code=404, detail="报告文件不存在，请先生成报告")
 
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if report_type == "excel" else "application/pdf"
+        
+        from fastapi.responses import FileResponse
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(filename)
+        
         return FileResponse(
             filepath,
             filename=filename,
-            media_type="application/octet-stream",
+            media_type=media_type,
+            headers={
+                "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
         )
 
     @app.get("/api/admin/scheduling-plans")

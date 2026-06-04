@@ -4,13 +4,20 @@
       <template #header>
         <div class="card-header flex-between">
           <span>部门考勤统计</span>
-          <el-date-picker
-            v-model="dashboardDate"
-            type="date"
-            placeholder="选择日期"
-            size="small"
-            @change="fetchData"
-          />
+          <div class="filter-bar">
+            <el-date-picker
+              v-model="dashboardDate"
+              type="date"
+              placeholder="选择日期"
+              size="small"
+              @change="fetchData"
+              style="margin-right: 10px"
+            />
+            <el-button type="primary" link size="small" @click="refreshData">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
         </div>
       </template>
       <el-table :data="departments" stripe border>
@@ -82,9 +89,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getDepartmentsDashboard } from '@/api/admin'
+import { Refresh } from '@element-plus/icons-vue'
 
 const dashboardDate = ref(new Date())
 const departments = ref([])
@@ -92,15 +100,15 @@ const chartBar = ref()
 const chartPie = ref()
 let barChart = null
 let pieChart = null
+let refreshTimer = null
 
 const fetchData = async () => {
   const params = {
     dashboard_date: dashboardDate.value.toISOString().split('T')[0]
   }
   departments.value = await getDepartmentsDashboard(params)
-  nextTick(() => {
-    renderCharts()
-  })
+  await nextTick()
+  renderCharts()
 }
 
 const renderCharts = () => {
@@ -110,8 +118,11 @@ const renderCharts = () => {
 
 const renderBarChart = () => {
   if (!chartBar.value) return
-  if (barChart) barChart.dispose()
-  barChart = echarts.init(chartBar.value)
+  if (barChart) {
+    barChart.dispose()
+    barChart = null
+  }
+  barChart = echarts.init(chartBar.value, null, { renderer: 'canvas' })
   
   const sorted = [...departments.value].sort((a, b) => a.attendance_rate_value - b.attendance_rate_value)
   
@@ -128,6 +139,7 @@ const renderBarChart = () => {
     },
     xAxis: {
       type: 'value',
+      min: 0,
       max: 100,
       axisLabel: { formatter: '{value}%' }
     },
@@ -138,7 +150,7 @@ const renderBarChart = () => {
     series: [{
       type: 'bar',
       data: sorted.map(item => ({
-        value: item.attendance_rate_value * 100,
+        value: (item.attendance_rate_value || 0) * 100,
         itemStyle: {
           color: getBarColor(item.attendance_rate_value)
         }
@@ -147,20 +159,25 @@ const renderBarChart = () => {
         show: true,
         position: 'right',
         formatter: '{c}%'
-      }
+      },
+      barMaxWidth: 20
     }]
   }
-  barChart.setOption(option)
+  barChart.setOption(option, true)
+  barChart.resize()
 }
 
 const renderPieChart = () => {
   if (!chartPie.value) return
-  if (pieChart) pieChart.dispose()
-  pieChart = echarts.init(chartPie.value)
+  if (pieChart) {
+    pieChart.dispose()
+    pieChart = null
+  }
+  pieChart = echarts.init(chartPie.value, null, { renderer: 'canvas' })
   
-  const totalLate = departments.value.reduce((sum, d) => sum + d.late_count, 0)
-  const totalEarly = departments.value.reduce((sum, d) => sum + d.early_leave_count, 0)
-  const totalNoPunch = departments.value.reduce((sum, d) => sum + d.no_punch_count, 0)
+  const totalLate = departments.value.reduce((sum, d) => sum + (d.late_count || 0), 0)
+  const totalEarly = departments.value.reduce((sum, d) => sum + (d.early_leave_count || 0), 0)
+  const totalNoPunch = departments.value.reduce((sum, d) => sum + (d.no_punch_count || 0), 0)
   
   const option = {
     tooltip: { trigger: 'item' },
@@ -179,7 +196,8 @@ const renderPieChart = () => {
       }
     }]
   }
-  pieChart.setOption(option)
+  pieChart.setOption(option, true)
+  pieChart.resize()
 }
 
 const getProgressColor = (value) => {
@@ -194,6 +212,10 @@ const getBarColor = (value) => {
   return '#F56C6C'
 }
 
+const refreshData = () => {
+  fetchData()
+}
+
 const handleResize = () => {
   barChart?.resize()
   pieChart?.resize()
@@ -201,7 +223,21 @@ const handleResize = () => {
 
 onMounted(() => {
   fetchData()
+  refreshTimer = setInterval(fetchData, 60000)
   window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  window.removeEventListener('resize', handleResize)
+  if (barChart) {
+    barChart.dispose()
+    barChart = null
+  }
+  if (pieChart) {
+    pieChart.dispose()
+    pieChart = null
+  }
 })
 </script>
 

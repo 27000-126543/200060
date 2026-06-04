@@ -151,35 +151,48 @@ const fetchData = async () => {
   Object.assign(overview, ov)
   attendanceTrend.value = trend
   departmentRanking.value = depts.sort((a, b) => b.attendance_rate_value - a.attendance_rate_value)
-  nextTick(() => {
-    renderTrendChart()
-    renderAnomalyChart()
-    renderLateEarlyChart()
-  })
+  await nextTick()
+  renderTrendChart()
+  renderAnomalyChart()
+  renderLateEarlyChart()
 }
 
 const renderTrendChart = () => {
   if (!chartTrend.value) return
-  if (trendChart) trendChart.dispose()
-  trendChart = echarts.init(chartTrend.value)
+  if (trendChart) {
+    trendChart.dispose()
+    trendChart = null
+  }
+  trendChart = echarts.init(chartTrend.value, null, { renderer: 'canvas' })
+  
+  const trendData = attendanceTrend.value || []
+  const xData = trendData.map(item => item.date ? item.date.slice(5) : '')
+  const rateData = trendData.map(item => (item.attendance_rate !== undefined ? item.attendance_rate * 100 : 0))
   
   const option = {
     tooltip: {
       trigger: 'axis'
     },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
     xAxis: {
       type: 'category',
-      data: attendanceTrend.value.map(item => item.date.slice(5))
+      data: xData
     },
     yAxis: {
       type: 'value',
+      min: 0,
       max: 100,
       axisLabel: { formatter: '{value}%' }
     },
     series: [{
       type: 'line',
       smooth: true,
-      data: attendanceTrend.value.map(item => item.attendance_rate * 100),
+      data: rateData,
       lineStyle: { width: 3, color: '#409EFF' },
       itemStyle: { color: '#409EFF' },
       areaStyle: {
@@ -190,18 +203,22 @@ const renderTrendChart = () => {
       }
     }]
   }
-  trendChart.setOption(option)
+  trendChart.setOption(option, true)
+  trendChart.resize()
 }
 
 const renderAnomalyChart = () => {
   if (!chartAnomaly.value) return
-  if (anomalyChart) anomalyChart.dispose()
-  anomalyChart = echarts.init(chartAnomaly.value)
+  if (anomalyChart) {
+    anomalyChart.dispose()
+    anomalyChart = null
+  }
+  anomalyChart = echarts.init(chartAnomaly.value, null, { renderer: 'canvas' })
   
   const data = [
-    { value: overview.late_count || 0, name: '迟到' },
-    { value: overview.early_leave_count || 0, name: '早退' },
-    { value: overview.no_punch_count || 0, name: '未打卡' },
+    { value: overview.late_count || 0, name: '迟到', itemStyle: { color: '#E6A23C' } },
+    { value: overview.early_leave_count || 0, name: '早退', itemStyle: { color: '#F56C6C' } },
+    { value: overview.no_punch_count || 0, name: '未打卡', itemStyle: { color: '#909399' } },
   ]
   
   const option = {
@@ -224,38 +241,56 @@ const renderAnomalyChart = () => {
       }
     }]
   }
-  anomalyChart.setOption(option)
+  anomalyChart.setOption(option, true)
+  anomalyChart.resize()
 }
 
 const renderLateEarlyChart = () => {
   if (!chartLateEarly.value) return
-  if (lateEarlyChart) lateEarlyChart.dispose()
-  lateEarlyChart = echarts.init(chartLateEarly.value)
+  if (lateEarlyChart) {
+    lateEarlyChart.dispose()
+    lateEarlyChart = null
+  }
+  lateEarlyChart = echarts.init(chartLateEarly.value, null, { renderer: 'canvas' })
+  
+  const trendData = attendanceTrend.value || []
+  const xData = trendData.map(item => item.date ? item.date.slice(5) : '')
+  const lateData = trendData.map(item => item.late_count || 0)
+  const earlyData = trendData.map(item => item.early_leave_count || 0)
   
   const option = {
     tooltip: { trigger: 'axis' },
     legend: { data: ['迟到', '早退'] },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true
+    },
     xAxis: {
       type: 'category',
-      data: attendanceTrend.value.map(item => item.date.slice(5))
+      data: xData
     },
     yAxis: { type: 'value' },
     series: [
       {
         name: '迟到',
         type: 'bar',
-        data: attendanceTrend.value.map(item => item.late_count),
-        itemStyle: { color: '#E6A23C' }
+        data: lateData,
+        itemStyle: { color: '#E6A23C' },
+        barMaxWidth: 30
       },
       {
         name: '早退',
         type: 'bar',
-        data: attendanceTrend.value.map(item => item.early_leave_count),
-        itemStyle: { color: '#F56C6C' }
+        data: earlyData,
+        itemStyle: { color: '#F56C6C' },
+        barMaxWidth: 30
       }
     ]
   }
-  lateEarlyChart.setOption(option)
+  lateEarlyChart.setOption(option, true)
+  lateEarlyChart.resize()
 }
 
 const getRateClass = (value) => {
@@ -336,7 +371,8 @@ onUnmounted(() => {
 }
 
 .chart-container {
-  height: 280px;
+  height: 320px;
+  min-height: 320px;
 }
 
 .text-red { color: #f56c6c; font-weight: bold; }

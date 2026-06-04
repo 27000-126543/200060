@@ -14,6 +14,10 @@
               size="small"
               style="margin-right: 10px"
             />
+            <el-button type="primary" link size="small" @click="refreshData" style="margin-right: 10px">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
             <el-button type="primary" size="small" @click="fetchData">
               查询
             </el-button>
@@ -55,15 +59,16 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { getEmployeePunches } from '@/api/employee'
-import { Check } from '@element-plus/icons-vue'
+import { Check, Refresh } from '@element-plus/icons-vue'
 
 const tableData = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
 const dateRange = ref([])
+let refreshTimer = null
 
 const fetchData = async () => {
   const params = {
@@ -79,8 +84,17 @@ const fetchData = async () => {
   total.value = res.total || 0
 }
 
+const refreshData = () => {
+  fetchData()
+}
+
 onMounted(() => {
   fetchData()
+  refreshTimer = setInterval(fetchData, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 

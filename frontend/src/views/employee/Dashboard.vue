@@ -51,8 +51,12 @@
       <el-col :span="12">
         <el-card shadow="hover">
           <template #header>
-            <div class="card-header">
+            <div class="card-header flex-between">
               <span>异常类型分布</span>
+              <el-button type="primary" link size="small" @click="refreshData">
+                <el-icon><Refresh /></el-icon>
+                刷新
+              </el-button>
             </div>
           </template>
           <div ref="chartAnomaly" class="chart-container"></div>
@@ -115,16 +119,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getEmployeeDashboard, getEmployeeMonthlySummary, getEmployeeAnomalies } from '@/api/employee'
-import { Timer, Warning, Bell, Document } from '@element-plus/icons-vue'
+import { Timer, Warning, Bell, Document, Refresh } from '@element-plus/icons-vue'
 
 const chartAnomaly = ref()
 const dashboard = reactive({})
 const monthlySummary = reactive({})
 const recentAnomalies = ref([])
 let anomalyChart = null
+let refreshTimer = null
 
 const fetchData = async () => {
   const [dashData, summaryData, anomalyData] = await Promise.all([
@@ -135,19 +140,28 @@ const fetchData = async () => {
   Object.assign(dashboard, dashData)
   Object.assign(monthlySummary, summaryData)
   recentAnomalies.value = anomalyData.items || []
-  nextTick(() => {
-    renderAnomalyChart()
-  })
+  await nextTick()
+  renderAnomalyChart()
 }
 
 const renderAnomalyChart = () => {
   if (!chartAnomaly.value) return
   if (anomalyChart) {
     anomalyChart.dispose()
+    anomalyChart = null
   }
-  anomalyChart = echarts.init(chartAnomaly.value)
+  anomalyChart = echarts.init(chartAnomaly.value, null, { renderer: 'canvas' })
   
   const data = dashboard.anomaly_distribution || []
+  const chartData = data.length > 0 ? data.map(item => ({
+    value: item.count,
+    name: item.type_label || item.type
+  })) : [
+    { value: 0, name: '正常' },
+    { value: 0, name: '迟到' },
+    { value: 0, name: '早退' }
+  ]
+  
   const option = {
     tooltip: {
       trigger: 'item'
@@ -162,10 +176,7 @@ const renderAnomalyChart = () => {
         type: 'pie',
         radius: ['40%', '70%'],
         center: ['40%', '50%'],
-        data: data.map(item => ({
-          value: item.count,
-          name: item.type
-        })),
+        data: chartData,
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
@@ -174,12 +185,22 @@ const renderAnomalyChart = () => {
           }
         },
         label: {
-          show: true
+          show: true,
+          formatter: '{b}: {c} ({d}%)'
         }
       }
     ]
   }
-  anomalyChart.setOption(option)
+  anomalyChart.setOption(option, true)
+  anomalyChart.resize()
+}
+
+const handleResize = () => {
+  anomalyChart?.resize()
+}
+
+const refreshData = () => {
+  fetchData()
 }
 
 const getStatusType = (status) => {
@@ -196,9 +217,17 @@ const getStatusType = (status) => {
 
 onMounted(() => {
   fetchData()
-  window.addEventListener('resize', () => {
-    anomalyChart?.resize()
-  })
+  refreshTimer = setInterval(fetchData, 30000)
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  window.removeEventListener('resize', handleResize)
+  if (anomalyChart) {
+    anomalyChart.dispose()
+    anomalyChart = null
+  }
 })
 </script>
 

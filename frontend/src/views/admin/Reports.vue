@@ -4,10 +4,16 @@
       <template #header>
         <div class="card-header flex-between">
           <span>月度报告列表</span>
-          <el-button type="primary" @click="openGenerateDialog">
-            <el-icon><DocumentAdd /></el-icon>
-            生成报告
-          </el-button>
+          <div>
+            <el-button type="primary" link size="small" @click="refreshData" style="margin-right: 10px">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+            <el-button type="primary" @click="openGenerateDialog">
+              <el-icon><DocumentAdd /></el-icon>
+              生成报告
+            </el-button>
+          </div>
         </div>
       </template>
       <el-table :data="reports" stripe border>
@@ -156,18 +162,20 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ElMessage, ElLoading } from 'element-plus'
 import {
   getMonthlyReports, generateMonthlyReport, downloadReport, getEmployees
 } from '@/api/admin'
-import { DocumentAdd, Download, View } from '@element-plus/icons-vue'
+import { DocumentAdd, Download, View, Refresh } from '@element-plus/icons-vue'
 
 const reports = ref([])
 const currentReport = ref(null)
 const activeTab = ref('overview')
 const generateDialogVisible = ref(false)
 const generating = ref(false)
+const downloading = ref(false)
+let refreshTimer = null
 const summary = ref({
   total_work_hours: 0,
   overtime_hours_weekday: 0,
@@ -189,7 +197,7 @@ const generateForm = reactive({
 
 const fetchData = async () => {
   reports.value = await getMonthlyReports()
-  if (reports.value.length > 0) {
+  if (reports.value.length > 0 && !currentReport.value) {
     previewReport(reports.value[0])
   }
 }
@@ -215,8 +223,13 @@ const previewReport = async (row) => {
   }
 }
 
+const refreshData = () => {
+  fetchData()
+}
+
 const openGenerateDialog = () => {
-  generateForm.month = ''
+  const now = new Date()
+  generateForm.month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   generateForm.report_type = 'both'
   generateDialogVisible.value = true
 }
@@ -227,6 +240,11 @@ const handleGenerate = async () => {
     return
   }
   generating.value = true
+  const loading = ElLoading.service({
+    lock: true,
+    text: '正在生成报告，请稍候...',
+    background: 'rgba(0, 0, 0, 0.7)',
+  })
   try {
     await generateMonthlyReport({
       year_month: generateForm.month,
@@ -235,23 +253,59 @@ const handleGenerate = async () => {
     ElMessage.success('报告生成成功')
     generateDialogVisible.value = false
     fetchData()
+  } catch (error) {
+    ElMessage.error('报告生成失败：' + (error.message || '未知错误'))
   } finally {
     generating.value = false
+    loading.close()
   }
 }
 
-const downloadExcel = (row) => {
-  downloadReport('excel', row.year_month)
-  ElMessage.success('正在下载 Excel 报告...')
+const downloadExcel = async (row) => {
+  if (downloading.value) return
+  downloading.value = true
+  const loading = ElLoading.service({
+    lock: true,
+    text: '正在下载 Excel 报告...',
+    background: 'rgba(0, 0, 0, 0.7)',
+  })
+  try {
+    await downloadReport('excel', row.year_month)
+    ElMessage.success('Excel 报告下载成功')
+  } catch (error) {
+    ElMessage.error('下载失败：' + (error.message || '请先生成报告'))
+  } finally {
+    downloading.value = false
+    loading.close()
+  }
 }
 
-const downloadPdf = (row) => {
-  downloadReport('pdf', row.year_month)
-  ElMessage.success('正在下载 PDF 报告...')
+const downloadPdf = async (row) => {
+  if (downloading.value) return
+  downloading.value = true
+  const loading = ElLoading.service({
+    lock: true,
+    text: '正在下载 PDF 报告...',
+    background: 'rgba(0, 0, 0, 0.7)',
+  })
+  try {
+    await downloadReport('pdf', row.year_month)
+    ElMessage.success('PDF 报告下载成功')
+  } catch (error) {
+    ElMessage.error('下载失败：' + (error.message || '请先生成报告'))
+  } finally {
+    downloading.value = false
+    loading.close()
+  }
 }
 
 onMounted(() => {
   fetchData()
+  refreshTimer = setInterval(fetchData, 60000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 

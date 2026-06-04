@@ -41,7 +41,30 @@ export function generateMonthlyReport(data) {
 
 export function downloadReport(reportType, yearMonth) {
   const token = localStorage.getItem('token')
-  window.open(`/api/admin/reports/download/${reportType}/${yearMonth}`)
+  const url = `/api/admin/reports/download/${reportType}/${yearMonth}`
+  return fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  }).then(response => {
+    if (!response.ok) {
+      throw new Error('下载失败')
+    }
+    const filename = response.headers.get('Content-Disposition')
+      ? response.headers.get('Content-Disposition').split('filename=')[1].replace(/"/g, '')
+      : `attendance_report_${yearMonth}.${reportType === 'excel' ? 'xlsx' : 'pdf'}`
+    
+    return response.blob().then(blob => {
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    })
+  })
 }
 
 export function getSchedulingPlans(params) {

@@ -119,6 +119,9 @@ def load_config(config_path: Optional[str] = None) -> SystemConfig:
             cfg.log_level = raw["logging"].get("level", cfg.log_level)
             cfg.log_file = raw["logging"].get("file", cfg.log_file)
 
+    if os.environ.get("DATABASE_URL"):
+        cfg.database.url = os.environ["DATABASE_URL"]
+
     _CONFIG_INSTANCE = cfg
     return cfg
 
